@@ -1,0 +1,13 @@
+{
+  "name": "@karaoke/gate",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx server/index.ts",
+    "build": "vite build",
+    "typecheck": "vue-tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": { "@karaoke/contracts": "*", "vue": "^3.5.0", "ws": "^8.18.0" },
+  "devDependencies": { "@types/ws": "^8.18.0", "@vitejs/plugin-vue": "^6.0.0", "tsx": "^4.20.0", "vite": "^7.0.0", "vue-tsc": "^3.0.0" }
+}

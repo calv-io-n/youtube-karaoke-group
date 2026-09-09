@@ -1,0 +1,9 @@
+{
+  "name": "YouTube Group Karaoke",
+  "short_name": "Karaoke",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f5ee",
+  "theme_color": "#254e3d",
+  "description": "Phone controller and guest queue for a shared YouTube karaoke room."
+}

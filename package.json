@@ -1,0 +1,30 @@
+{
+  "name": "youtube-group-karaoke",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev:info": "node scripts/dev-info.mjs",
+    "dev:gate": "npm run dev -w @karaoke/gate",
+    "dev:room": "npm run dev -w @karaoke/room-worker",
+    "dev:extension": "npm run dev -w @karaoke/extension",
+    "build": "npm run build -w @karaoke/gate && npm run build -w @karaoke/extension",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "vitest run",
+    "test:browser": "playwright test",
+    "gate:live": "node scripts/live-gate.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.1.11"
+  }
+}

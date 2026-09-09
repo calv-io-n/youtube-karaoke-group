@@ -1,0 +1,13 @@
+node_modules/
+.output/
+.wxt/
+dist/
+.env
+.env.*
+!.env.example
+test-results/
+playwright-report/
+artifacts/*.json
+artifacts/*.png
+artifacts/*.webm
+!artifacts/.gitkeep
