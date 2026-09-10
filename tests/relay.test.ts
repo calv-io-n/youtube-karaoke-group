@@ -4,16 +4,19 @@ import { once } from 'node:events';
 import { WebSocket } from 'ws';
 import { createRelay } from '../apps/gate/server/relay';
 import { ADAPTER_VERSION, newId } from '@karaoke/contracts';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0)) await cleanup(); });
-async function setup() {
+async function setup(options: { storePath?: string } = {}) {
   const server = createServer();
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   const port = (server.address() as { port: number }).port;
   const origin = `http://127.0.0.1:${port}`;
-  const relay = createRelay(origin);
+  const relay = createRelay(origin, undefined, options);
   server.on('request', (req, res) => void relay.handle(req, res));
   server.on('upgrade', relay.upgrade);
   cleanups.push(async () => { relay.close(); server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); });
@@ -73,7 +76,7 @@ describe('temporary relay boundaries', () => {
     const response = await fetch(`${origin}/api/gate/sessions`, { method: 'POST', headers: { Origin: 'https://evil.test' } });
     expect(response.status).toBe(403);
   });
-  it('attributes guest requests to a joined participant and automatically queues songs for host-controlled start', async () => {
+  it('attributes guest requests to a joined participant and automatically queues songs without moderation', async () => {
     const { request, created, base, connect } = await setup();
     const guestJoin = await fetch(base + '/join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ displayName: 'Jamie' }) }).then(r => r.json());
     const guestRequest = (path: string, method = 'GET', data?: unknown) => fetch(base + path, { method, headers: { Authorization: `Bearer ${guestJoin.guestToken}`, ...(data ? { 'Content-Type': 'application/json' } : {}) }, ...(data ? { body: JSON.stringify(data) } : {}) });
@@ -83,7 +86,7 @@ describe('temporary relay boundaries', () => {
     host.send(JSON.stringify({ type: 'observation', observation: { adapterVersion: ADAPTER_VERSION, sequence: 0, attemptId: null, videoId: 'jNQXAC9IVRw', playerState: 'paused', currentTime: 0, duration: 20, loadEvidence: false, fullscreen: true, fullscreenPreserved: true, playerPreserved: true, overlayMounted: true, adShowing: false, capabilities: { load: true, pause: true, resume: true, identity: true }, error: null } }));
     await new Promise(resolve => setTimeout(resolve, 10));
     const controllerQueue = (path: string, data: unknown) => request(path, 'controller', 'POST', data);
-    expect((await guestRequest('/queue', 'POST', { action: 'start-next' })).status).not.toBe(202);
+    expect((await guestRequest('/queue', 'POST', { action: 'remove', itemId: submitted.item.id })).status).toBe(403);
     const started = await controllerQueue('/queue', { action: 'start-next' }).then(r => r.json());
     expect(started.queue.items.find((item: any) => item.id === submitted.item.id).status).toBe('playing');
   });
@@ -100,5 +103,122 @@ describe('temporary relay boundaries', () => {
     expect((await fetch(base, { headers: { Authorization: `Bearer ${created.extensionToken}` } })).status).toBe(401);
     expect((await fetch(base, { headers: { Authorization: `Bearer ${recovered.extensionToken}` } })).status).toBe(200);
     expect((await fetch(base + '/recover', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recoveryCode: 'wrong' }) })).status).toBe(403);
+  });
+});
+
+describe('room codes and guest reorder', () => {
+  const guestJoin = async (base: string, displayName: string) => {
+    const joined = await fetch(base + '/join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ displayName }) }).then(r => r.json());
+    return (path: string, method = 'GET', data?: unknown) => fetch(base + path, { method, headers: { Authorization: `Bearer ${joined.guestToken}`, ...(data ? { 'Content-Type': 'application/json' } : {}) }, ...(data ? { body: JSON.stringify(data) } : {}) });
+  };
+  it('issues a four-letter room code that resolves to the public join link case-insensitively', async () => {
+    const { origin, created } = await setup();
+    expect(created.roomCode).toMatch(/^[A-HJKMNP-Z]{4}$/);
+    const resolved = await fetch(`${origin}/api/gate/rooms/${created.roomCode.toLowerCase()}`);
+    expect(resolved.status).toBe(200);
+    expect(await resolved.json()).toEqual({ sessionId: created.sessionId, joinUrl: created.joinUrl });
+  });
+  it('reports the room code to authenticated queue readers and on recovery', async () => {
+    const { created, base, request } = await setup();
+    expect(typeof created.roomCode).toBe('string');
+    expect((await request('/queue', 'controller').then(r => r.json())).roomCode).toBe(created.roomCode);
+    const recovered = await fetch(base + '/recover', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recoveryCode: created.recoveryCode }) }).then(r => r.json());
+    expect(recovered.roomCode).toBe(created.roomCode);
+  });
+  it('returns 404 for unknown, malformed, expired, and closed room codes', async () => {
+    const { origin, created, relay, request } = await setup();
+    const unknown = created.roomCode === 'ZZZZ' ? 'YYYY' : 'ZZZZ';
+    expect((await fetch(`${origin}/api/gate/rooms/${unknown}`)).status).toBe(404);
+    expect((await fetch(`${origin}/api/gate/rooms/AB1`)).status).toBe(404);
+    relay.sessions.get(created.sessionId)!.expires = Date.now() - 1;
+    expect((await fetch(`${origin}/api/gate/rooms/${created.roomCode}`)).status).toBe(404);
+    relay.sessions.get(created.sessionId)!.expires = Date.now() + 60_000;
+    expect((await request('/close', 'extension', 'POST')).status).toBe(200);
+    expect((await fetch(`${origin}/api/gate/rooms/${created.roomCode}`)).status).toBe(404);
+  });
+  it('lets a joined guest reorder the waiting queue with optimistic concurrency', async () => {
+    const { base } = await setup();
+    const alex = await guestJoin(base, 'Alex'); const sam = await guestJoin(base, 'Sam');
+    const first = await alex('/queue', 'POST', { videoId: 'DtVBCG6ThDk', singer: 'Alex' }).then(r => r.json());
+    const second = await sam('/queue', 'POST', { videoId: 'djV11Xbc914', singer: 'Sam' }).then(r => r.json());
+    const reordered = await sam('/queue', 'POST', { action: 'reorder', itemIds: [second.item.id, first.item.id], expectedQueueRevision: second.queue.revision });
+    expect(reordered.status).toBe(202);
+    expect((await reordered.json()).queue.items.map((item: any) => item.singer)).toEqual(['Sam', 'Alex']);
+    const stale = await alex('/queue', 'POST', { action: 'reorder', itemIds: [first.item.id, second.item.id], expectedQueueRevision: second.queue.revision });
+    expect(stale.status).toBe(409); expect((await stale.json()).code).toBe('VERSION_CONFLICT');
+  });
+  it('lets a joined guest start the next singer and use pause, resume, and stop', async () => {
+    const { base, connect } = await setup();
+    const guest = await guestJoin(base, 'Jamie');
+    const item = await guest('/queue', 'POST', { videoId: 'DtVBCG6ThDk', singer: 'Jamie' }).then(r => r.json());
+    const host = await connect('extension');
+    host.send(JSON.stringify({ type: 'observation', observation: { adapterVersion: ADAPTER_VERSION, sequence: 0, attemptId: null, videoId: 'jNQXAC9IVRw', playerState: 'paused', currentTime: 0, duration: 20, loadEvidence: false, fullscreen: true, fullscreenPreserved: true, playerPreserved: true, overlayMounted: true, adShowing: false, capabilities: { load: true, pause: true, resume: true, identity: true }, error: null } }));
+    await new Promise(resolve => setTimeout(resolve, 10));
+    const started = await guest('/queue', 'POST', { action: 'start-next' });
+    expect(started.status).toBe(202);
+    expect((await started.json()).queue.items.find((entry: any) => entry.id === item.item.id).status).toBe('playing');
+    for (const action of ['pause', 'resume', 'skip']) expect((await guest('/queue', 'POST', { action })).status).not.toBe(403);
+  });
+  it('marks the interrupted performance skipped when the next singer starts mid-song', async () => {
+    const { base, connect } = await setup();
+    const guest = await guestJoin(base, 'Jamie');
+    const first = await guest('/queue', 'POST', { videoId: 'DtVBCG6ThDk', singer: 'Alex' }).then(r => r.json());
+    const second = await guest('/queue', 'POST', { videoId: 'djV11Xbc914', singer: 'Sam' }).then(r => r.json());
+    const host = await connect('extension');
+    host.send(JSON.stringify({ type: 'observation', observation: { adapterVersion: ADAPTER_VERSION, sequence: 0, attemptId: null, videoId: 'jNQXAC9IVRw', playerState: 'paused', currentTime: 0, duration: 20, loadEvidence: false, fullscreen: true, fullscreenPreserved: true, playerPreserved: true, overlayMounted: true, adShowing: false, capabilities: { load: true, pause: true, resume: true, identity: true }, error: null } }));
+    await new Promise(resolve => setTimeout(resolve, 10));
+    const commands: any[] = []; host.on('message', raw => { const msg = JSON.parse(raw.toString()); if (msg.type === 'command') commands.push(msg.command); });
+    expect((await guest('/queue', 'POST', { action: 'start-next' })).status).toBe(202);
+    await new Promise(resolve => setTimeout(resolve, 10));
+    const load = commands.find(command => command.type === 'load');
+    host.send(JSON.stringify({ type: 'result', commandId: load.commandId, accepted: true }));
+    host.send(JSON.stringify({ type: 'observation', observation: { adapterVersion: ADAPTER_VERSION, sequence: 1, attemptId: load.performance.attemptId, videoId: 'DtVBCG6ThDk', playerState: 'playing', currentTime: 3, duration: 280, loadEvidence: true, fullscreen: true, fullscreenPreserved: true, playerPreserved: true, overlayMounted: true, adShowing: false, capabilities: { load: true, pause: true, resume: true, identity: true }, error: null } }));
+    await new Promise(resolve => setTimeout(resolve, 10));
+    const again = await guest('/queue', 'POST', { action: 'start-next' });
+    expect(again.status).toBe(202);
+    const items = (await again.json()).queue.items;
+    expect(items.find((entry: any) => entry.id === first.item.id).status).toBe('skipped');
+    expect(items.find((entry: any) => entry.id === second.item.id).status).toBe('playing');
+    expect(items.filter((entry: any) => entry.status === 'playing')).toHaveLength(1);
+  });
+  it('keeps moderation actions host-only for guests', async () => {
+    const { base } = await setup();
+    const guest = await guestJoin(base, 'Jamie');
+    const item = await guest('/queue', 'POST', { videoId: 'jNQXAC9IVRw', singer: 'Jamie' }).then(r => r.json());
+    for (const action of [{ action: 'approve', itemId: item.item.id }, { action: 'reject', itemId: item.item.id }, { action: 'remove', itemId: item.item.id }, { action: 'set-joining', open: false }]) {
+      const response = await guest('/queue', 'POST', action);
+      expect(response.status).toBe(403); expect((await response.json()).code).toBe('FORBIDDEN');
+    }
+  });
+});
+
+describe('relay persistence', () => {
+  it('restores rooms, credentials, guests, and the queue after a relay restart', async () => {
+    const storePath = join(mkdtempSync(join(tmpdir(), 'karaoke-store-')), 'sessions.json');
+    const first = await setup({ storePath });
+    const guestJoin = await fetch(first.base + '/join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ displayName: 'Jamie' }) }).then(r => r.json());
+    const submitted = await fetch(first.base + '/queue', { method: 'POST', headers: { Authorization: `Bearer ${guestJoin.guestToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ videoId: 'DtVBCG6ThDk', singer: 'Alex' }) }).then(r => r.json());
+    expect(submitted.item.status).toBe('queued');
+    const revisionBefore = (await first.request('', 'controller').then(r => r.json())).revision;
+    await cleanups.pop()!();
+    const second = await setup({ storePath });
+    const resolved = await fetch(`${second.origin}/api/gate/rooms/${first.created.roomCode}`);
+    expect(resolved.status).toBe(200); expect((await resolved.json()).sessionId).toBe(first.created.sessionId);
+    const base = `${second.origin}/api/gate/sessions/${first.created.sessionId}`;
+    const queue = await fetch(base + '/queue', { headers: { Authorization: `Bearer ${guestJoin.guestToken}` } });
+    expect(queue.status).toBe(200);
+    const body = await queue.json();
+    expect(body.queue.items.map((item: any) => [item.singer, item.requester, item.status])).toEqual([['Alex', 'Jamie', 'queued']]);
+    expect(body.playback.revision).toBeGreaterThanOrEqual(revisionBefore);
+    expect((await fetch(base + '/ticket', { method: 'POST', headers: { Authorization: `Bearer ${first.created.extensionToken}` } })).status).toBe(200);
+    expect((await fetch(base + '/ticket', { method: 'POST', headers: { Authorization: `Bearer ${new URL(first.created.controllerUrl).hash.slice(1)}` } })).status).toBe(200);
+  });
+  it('does not restore a session that was closed before the restart', async () => {
+    const storePath = join(mkdtempSync(join(tmpdir(), 'karaoke-store-')), 'sessions.json');
+    const first = await setup({ storePath });
+    expect((await first.request('/close', 'extension', 'POST')).status).toBe(200);
+    await cleanups.pop()!();
+    const second = await setup({ storePath });
+    expect((await fetch(`${second.origin}/api/gate/rooms/${first.created.roomCode}`)).status).toBe(404);
   });
 });

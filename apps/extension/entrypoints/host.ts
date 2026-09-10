@@ -21,7 +21,7 @@ export default defineUnlistedScript(() => {
     if (message.type === 'attach' && typeof message.viewerUrl === 'string') {
       const url = new URL(message.viewerUrl);
       if (url.origin !== __SERVICE_ORIGIN__) return;
-      overlay?.destroy(); overlay = createOverlay(url.href); active = true;
+      overlay?.destroy(); overlay = createOverlay(url.href, typeof message.roomCode === 'string' ? message.roomCode : undefined); active = true;
       port.postMessage({ type: 'ready' });
     } else if (message.type === 'state') {
       const parsed = GateState.safeParse(message.state);

@@ -6,7 +6,8 @@ import { resolveDevOrigin } from '../../../scripts/dev-origin.mjs';
 
 const port = Number(process.env.PORT ?? 8787);
 const publicOrigin = resolveDevOrigin();
-const relay = createRelay(publicOrigin);
+const storePath = process.env.GATE_STORE ?? fileURLToPath(new URL('../../../.gate-sessions.json', import.meta.url));
+const relay = createRelay(publicOrigin, message => console.log(message), { storePath });
 const vite = await createViteServer({ root: fileURLToPath(new URL('..', import.meta.url)), server: { middlewareMode: true, hmr: false, host: '0.0.0.0' }, appType: 'spa' });
 const server = createServer(async (req, res) => {
   res.setHeader('Referrer-Policy', 'no-referrer');

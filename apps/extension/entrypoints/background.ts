@@ -1,7 +1,7 @@
 import { browser } from 'wxt/browser';
 import { HostMessage, ServerMessage, type GateState } from '@karaoke/contracts';
 
-type Binding = { sessionId: string; extensionToken: string; controllerUrl: string; viewerUrl: string; joinUrl?: string; tabId: number; documentId: string };
+type Binding = { sessionId: string; extensionToken: string; controllerUrl: string; viewerUrl: string; joinUrl?: string; roomCode?: string; tabId: number; documentId: string };
 
 export default defineBackground(() => {
   let binding: Binding | undefined;
@@ -66,7 +66,7 @@ export default defineBackground(() => {
   }
   function scheduleReconnect() {
     if (!binding || !host || retryTimer) return;
-    retryTimer = setTimeout(() => { retryTimer = undefined; void connect(); }, Math.min(30_000, 1000 * 2 ** Math.min(attempts++, 5)) + Math.random() * 500);
+    retryTimer = setTimeout(() => { retryTimer = undefined; void connect(); }, Math.min(5000, 500 * 2 ** Math.min(attempts++, 3)) + Math.random() * 300);
   }
   async function detach(closeSession: boolean) {
     hostSend({ type: 'detach' }); host = undefined;
@@ -92,7 +92,7 @@ export default defineBackground(() => {
       await browser.scripting.executeScript({ target: { tabId, documentIds: [binding!.documentId] }, files: ['/host.js'], world: 'ISOLATED' });
       await browser.alarms.create('karaoke-recover', { periodInMinutes: 1 });
       lastError = '';
-      return { controllerUrl: binding!.controllerUrl, viewerUrl: binding!.viewerUrl, sessionId: binding!.sessionId };
+      return { controllerUrl: binding!.controllerUrl, viewerUrl: binding!.viewerUrl, sessionId: binding!.sessionId, roomCode: binding!.roomCode, recoveryCode: session.recoveryCode };
     } catch (error) { await detach(true); throw error; }
     finally { busy = false; }
   }
@@ -109,7 +109,7 @@ export default defineBackground(() => {
     await browser.storage.session.set({ binding: restoredBinding });
     await browser.scripting.executeScript({ target: { tabId: tab.id, documentIds: [restoredBinding.documentId] }, files: ['/host.js'], world: 'ISOLATED' });
     await browser.alarms.create('karaoke-recover', { periodInMinutes: 1 });
-    return { controllerUrl: restoredBinding.controllerUrl, sessionId: restoredBinding.sessionId };
+    return { controllerUrl: restoredBinding.controllerUrl, sessionId: restoredBinding.sessionId, roomCode: restoredBinding.roomCode };
   }
   browser.runtime.onConnect.addListener(port => {
     if (port.name !== 'karaoke-host-v1') { port.disconnect(); return; }
@@ -132,7 +132,7 @@ export default defineBackground(() => {
         host = undefined; stopSocket();
         lastError = 'The bound document disconnected. Reattach on a YouTube watch page.';
       });
-      port.postMessage({ type: 'attach', viewerUrl: current.joinUrl ?? current.viewerUrl });
+      port.postMessage({ type: 'attach', viewerUrl: current.joinUrl ?? current.viewerUrl, roomCode: current.roomCode });
     });
   });
   browser.runtime.onMessage.addListener((message, sender, respond) => {
@@ -142,22 +142,31 @@ export default defineBackground(() => {
         if (message?.type === 'attach' && Number.isInteger(message.tabId)) respond({ ok: true, ...await attach(message.tabId) });
         else if (message?.type === 'recover') respond({ ok: true, ...await recover(String(message.sessionId ?? ''), String(message.recoveryCode ?? '')) });
         else if (message?.type === 'detach') { await detach(true); respond({ ok: true }); }
-        else if (message?.type === 'status') respond({ ok: true, binding: binding ? { tabId: binding.tabId, sessionId: binding.sessionId, controllerUrl: binding.controllerUrl } : null, state, error: lastError });
+        else if (message?.type === 'status') respond({ ok: true, binding: binding ? { tabId: binding.tabId, sessionId: binding.sessionId, controllerUrl: binding.controllerUrl, roomCode: binding.roomCode } : null, state, error: lastError });
         else respond({ ok: false, error: 'Unsupported extension action.' });
       } catch (error) { respond({ ok: false, error: error instanceof Error ? error.message : 'Extension action failed.' }); }
     });
     return true;
   });
   browser.tabs.onRemoved.addListener(tabId => { if (binding?.tabId === tabId) void detach(true); });
+  let recovering = false;
   async function recoverWorker() {
     await hydrated;
-    if (!binding || host) return;
+    if (!binding || host || busy || recovering) return;
+    recovering = true;
+    const current = binding;
     try {
-      const [probe] = await browser.scripting.executeScript({ target: { tabId: binding.tabId, documentIds: [binding.documentId] }, func: () => location.pathname });
-      if (probe?.result !== '/watch') return;
-      await browser.scripting.executeScript({ target: { tabId: binding.tabId, documentIds: [binding.documentId] }, files: ['/host.js'], world: 'ISOLATED' });
-    } catch { lastError = 'The original document is gone. Reattach explicitly.'; }
+      const [probe] = await browser.scripting.executeScript({ target: { tabId: current.tabId, frameIds: [0] }, func: () => ({ origin: location.origin, pathname: location.pathname }) });
+      const page = probe?.result as { origin: string; pathname: string } | undefined;
+      if (!probe?.documentId || page?.origin !== 'https://www.youtube.com' || page.pathname !== '/watch') { lastError = 'Open the bound tab on a YouTube watch page to restore the overlay.'; return; }
+      if (binding !== current) return;
+      if (probe.documentId !== current.documentId) { binding = { ...current, documentId: probe.documentId }; await browser.storage.session.set({ binding }); }
+      await browser.scripting.executeScript({ target: { tabId: current.tabId, documentIds: [binding.documentId] }, files: ['/host.js'], world: 'ISOLATED' });
+      lastError = '';
+    } catch { lastError = 'The bound tab is gone. Reattach explicitly.'; }
+    finally { recovering = false; }
   }
   browser.alarms.onAlarm.addListener(alarm => { if (alarm.name === 'karaoke-recover') void recoverWorker(); });
+  browser.tabs.onUpdated.addListener((tabId, info) => { if (binding?.tabId === tabId && info.status === 'complete' && !host) setTimeout(() => void recoverWorker(), 1500); });
   void recoverWorker();
 });
