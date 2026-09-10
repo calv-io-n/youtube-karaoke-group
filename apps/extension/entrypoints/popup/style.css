@@ -1,1 +1,33 @@
-:root{font:15px/1.5 Arial,sans-serif;color:#17332e;background:#f4f5ee}body{width:340px;margin:0}main{padding:26px}.eyebrow{font-size:10px;font-weight:700;letter-spacing:.1em}h1{font-size:32px;line-height:1.08;letter-spacing:-1px;margin:20px 0}h2{font-size:20px}p{color:#52665d}button{width:100%;padding:13px 16px;border:0;border-radius:7px;background:#234f43;color:white;font-weight:700;font-size:14px;cursor:pointer}button:disabled{opacity:.5}.secondary{background:transparent;color:#234f43;border:1px solid #aabbb0;margin-top:8px}a{color:#234f43;display:block;margin-top:12px}canvas{display:block;margin:auto;max-width:100%}.note{font-size:12px;border-top:1px solid #ccd7cb;padding-top:16px}#status{font-size:13px}.recovery{background:#eee2c9;padding:10px;border-radius:5px;overflow-wrap:anywhere;font-family:monospace;font-size:12px}input{width:100%;box-sizing:border-box;padding:10px;margin:5px 0 10px;border:1px solid #aabbb0;border-radius:4px}button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #b87f23;outline-offset:3px}
+:root {
+  --blue: #4fa9f2; --blue-dark: #2f8bd9; --blue-pale: #eaf6ff; --blue-soft: #cfe8ff;
+  --pink: #ff6fae; --pink-dark: #e04f92; --pink-light: #ffb3d1; --pink-pale: #fff0f6;
+  --ink: #3b3556; --muted: #6d6788; --dim: #8e88a8; --line: #e3e0ee; --amber-soft: #ffe9a8;
+  font: 600 14px/1.5 'Nunito', ui-rounded, 'Hiragino Maru Gothic ProN', 'Segoe UI', system-ui, sans-serif;
+  color: var(--ink); background: linear-gradient(180deg, var(--blue-pale), #fff6fa);
+}
+* { box-sizing: border-box; }
+body { width: 360px; margin: 0; }
+main { padding: 22px 22px 18px; }
+.brand { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.brand img { width: 44px; height: 44px; object-fit: contain; }
+.brand strong { display: block; font-size: 20px; font-weight: 900; letter-spacing: -.4px; line-height: 1.1; }
+.eyebrow { font-size: 10px; font-weight: 800; letter-spacing: .14em; color: var(--dim); text-transform: uppercase; }
+h1 { font-size: 30px; line-height: 1.08; letter-spacing: -.8px; font-weight: 900; margin: 6px 0 10px; }
+h2 { font-size: 17px; font-weight: 900; margin: 0 0 6px; }
+p { color: var(--muted); margin: 0 0 12px; }
+button { width: 100%; padding: 14px 16px; border: 0; border-radius: 20px; background: var(--pink); color: #fff; font: 900 15px 'Nunito', ui-rounded, system-ui, sans-serif; cursor: pointer; box-shadow: 0 5px 0 var(--pink-dark); transition: transform .08s, box-shadow .08s; }
+button:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 2px 0 var(--pink-dark); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+.secondary { background: #fff; color: var(--blue); box-shadow: 0 3px 0 var(--line); margin-top: 8px; }
+.secondary:active:not(:disabled) { box-shadow: 0 1px 0 var(--line); }
+a { color: var(--blue); font-weight: 800; display: block; margin-top: 12px; text-align: center; }
+section { margin-top: 16px; padding: 16px; border-radius: 22px; background: rgba(255, 255, 255, .8); box-shadow: 0 3px 0 var(--line); }
+canvas { display: block; margin: 10px auto; max-width: 100%; border: 3px solid var(--pink-light); border-radius: 18px; padding: 6px; background: #fff; }
+.note { font-size: 11px; color: var(--dim); margin: 18px 0 0; text-align: center; }
+#status { font-size: 13px; font-weight: 700; min-height: 20px; margin: 10px 0 0; color: var(--muted); }
+#room { text-align: center; font-size: 17px; font-weight: 900; letter-spacing: .1em; color: var(--pink); margin: 4px 0 6px; }
+.recovery { background: var(--amber-soft); color: #5c3d00; padding: 10px 12px; border-radius: 14px; overflow-wrap: anywhere; font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+label { display: block; font-size: 12px; font-weight: 800; color: var(--dim); margin: 8px 0 4px; }
+input { width: 100%; padding: 11px 12px; border: 3px solid var(--blue-soft); border-radius: 14px; font: 800 14px 'Nunito', ui-rounded, system-ui, sans-serif; color: var(--ink); background: #fff; outline: none; }
+input:focus { border-color: var(--blue); }
+button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }

@@ -1,9 +1,14 @@
 {
-  "name": "YouTube Group Karaoke",
-  "short_name": "Karaoke",
+  "name": "Utaoke — Group Karaoke",
+  "short_name": "Utaoke",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f5f5ee",
-  "theme_color": "#254e3d",
-  "description": "Phone controller and guest queue for a shared YouTube karaoke room."
+  "background_color": "#eaf6ff",
+  "theme_color": "#eaf6ff",
+  "description": "Phone controller and guest queue for a shared YouTube karaoke room.",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
 }
