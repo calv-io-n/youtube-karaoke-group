@@ -1,0 +1,23 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "apps/gate/src/components/JoinScreen.vue"
+        ],
+        "createdAt": "2026-09-10T03:14:44.495Z",
+        "reason": "Claude decided: the four two-sided borders are the QR viewfinder corner brackets from the Karaoke Controller prototype, not card accent tabs"
+      },
+      {
+        "rule": "bounce-easing",
+        "value": "cubic-bezier(.3, 1.3, .5, 1)",
+        "createdAt": "2026-09-10T03:14:44.585Z",
+        "reason": "Claude decided: the pull-down control sheet's spring snap is specified by the Karaoke Controller prototype (design 1a) for the drag handle"
+      }
+    ]
+  }
+}

@@ -125,6 +125,21 @@ describe('room codes and guest reorder', () => {
     const recovered = await fetch(base + '/recover', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recoveryCode: created.recoveryCode }) }).then(r => r.json());
     expect(recovered.roomCode).toBe(created.roomCode);
   });
+  it('lists joined display names for authenticated queue readers', async () => {
+    const { base, request } = await setup();
+    const guest = await guestJoin(base, 'Jamie');
+    await guestJoin(base, 'Sam');
+    expect((await request('/queue', 'controller').then(r => r.json())).members).toEqual(['Jamie', 'Sam']);
+    expect((await guest('/queue').then(r => r.json())).members).toEqual(['Jamie', 'Sam']);
+  });
+  it('lets the host submit a song to the queue attributed to Host', async () => {
+    const { request } = await setup();
+    const submitted = await request('/queue', 'controller', 'POST', { videoId: 'DtVBCG6ThDk', singer: 'Alex' });
+    expect(submitted.status).toBe(201);
+    const body = await submitted.json();
+    expect([body.item.singer, body.item.requester, body.item.status]).toEqual(['Alex', 'Host', 'queued']);
+    expect((await request('/queue', 'viewer', 'POST', { videoId: 'DtVBCG6ThDk', singer: 'Alex' })).status).toBe(400);
+  });
   it('returns 404 for unknown, malformed, expired, and closed room codes', async () => {
     const { origin, created, relay, request } = await setup();
     const unknown = created.roomCode === 'ZZZZ' ? 'YYYY' : 'ZZZZ';
