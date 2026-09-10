@@ -9,13 +9,13 @@ Prerequisites: Node 22 or newer, npm, desktop Chrome, and network access to YouT
 1. Connect the host computer and phones to the same network.
 2. Run `npm install`, then `npm run dev:info`. The latter prints the detected LAN origin (for example, `http://192.168.1.84:8787`). Container, loopback, and common VPN adapters are excluded.
 3. Run `npm run build` on that computer. The extension embeds the same origin in its service connection and host permissions.
-4. Run `npm run dev:gate` and leave it running. It listens on all interfaces; the printed LAN URL is the address phones should use. Opening localhost redirects to the LAN URL.
+4. Run `npm run dev:gate` and leave it running. Each opened room logs its four-letter code to this console. Sessions, room codes, credentials, guests, and queues are saved to `.gate-sessions.json` (override with `GATE_STORE`), so a relay restart keeps rooms open and the extension and phones reconnect on their own. The relay does not reload server code; restart it after editing `apps/gate/server/*`. It listens on all interfaces; the printed LAN URL is the address phones should use. Opening localhost redirects to the LAN URL.
 5. Open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select `apps/extension/.output/chrome-mv3` inside this repository.
 6. Open a regular YouTube watch page in Chrome. Turn off YouTube autoplay and avoid native playlists for this test.
-7. Open the extension popup and choose **Start playback test**. Scan the popup's **private controller QR** on the host phone. This link controls playback; keep it off the shared screen.
-8. Enter YouTube fullscreen on the computer. The overlay's QR is a separate **guest join link**. Its caption displays the LAN host and port.
-9. Guests scan the overlay QR, choose a display name, paste a YouTube link, and name a singer. The host controller sees the request, approves it, and chooses **Start next singer**. The singer appears on the screen only after matching playback is confirmed.
-10. The controller can close joining, reject/remove requests, pause/resume, stop to intermission, and inspect the current queue. Close the session from the extension popup when finished. Stopping the relay discards all sessions.
+7. Open the extension popup and choose **Start playback test**. Scan the popup's **private controller QR** on the host phone. This link controls playback; keep it off the shared screen. The popup also shows the four-letter **room code** for guests.
+8. Enter YouTube fullscreen on the computer. The overlay's QR is a separate **guest join link**, and the overlay shows the room code. Guests without a camera can open the LAN URL and type the code on the home page, or open `/r/CODE` directly.
+9. Guests scan the overlay QR or enter the room code, choose a display name, paste a YouTube link, and name a singer. Requests queue automatically. Any joined guest can reorder waiting singers with the **Position** dropdown, and can press **Start next singer**, **Pause**, **Resume**, and **Stop / intermission**; every device sees changes immediately, and a stale reorder shows "Queue changed" and refreshes. Starting the next singer mid-song marks the interrupted request as skipped. Approve, reject, remove, and open/close joining remain host-only. The singer appears on the screen only after matching playback is confirmed.
+10. The controller can close joining, reject/remove requests, pause/resume, stop to intermission, and inspect the current queue. Close the session from the extension popup when finished. Stopping the relay keeps sessions on disk for the next start.
 
 The private controller link is an expiring prototype credential. The extension popup also shows a recovery code once per session; use it after an extension/browser restart to rotate the extension token and rebind the active YouTube tab. The LAN relay still has in-memory room state, so a relay restart requires a fresh session.
 
@@ -56,7 +56,7 @@ See the [Gate A checklist](gate-a-checklist.md) for what a complete gate result 
 - **Transport disabled:** wait for the extension's fresh player observation. On a changed/reloaded YouTube document, reattach from the popup. Do not repeatedly click start after an uncertain response; use **Check original command**.
 - **YouTube requests sign-in or refuses playback:** establish normal playback locally first. The extension does not supply account access or bypass restrictions.
 - **Fullscreen lost:** restore it on the host computer. Phone commands cannot provide the browser's required local activation.
-- **Relay restart:** create a fresh prototype session because the development relay is in-memory. **Extension/browser reload:** use the room ID and one-time recovery code from the popup, then rebind the active YouTube watch tab.
+- **Relay restart:** rooms are restored from `.gate-sessions.json`; wait a few seconds for the extension and phones to reconnect. Delete that file to start clean. **YouTube tab reload:** the extension rebinds automatically once the tab is back on a watch page. **Extension/browser reload:** use the room ID and one-time recovery code from the popup, then rebind the active YouTube watch tab.
 
 The phone app includes a web manifest and shell cache. Service-worker registration intentionally requires HTTPS; the trusted-LAN HTTP demo remains network-only. Authenticated API responses, room credentials, and YouTube media are never cached. Cloudflare Tunnel is deferred, as recorded in [ADR 0002](../adr/0002-lan-development-invitations.md).
 

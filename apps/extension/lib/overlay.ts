@@ -1,13 +1,13 @@
 import QRCode from 'qrcode';
 import type { GateState } from '@karaoke/contracts';
 
-export function createOverlay(viewerUrl: string) {
+export function createOverlay(viewerUrl: string, roomCode?: string) {
   const host = document.createElement('div');
   host.id = 'karaoke-gate-overlay';
   host.style.cssText = 'position:absolute;inset:0;z-index:2147483647;pointer-events:none;';
   const root = host.attachShadow({ mode: 'open' });
   const style = document.createElement('style');
-  style.textContent = ':host{all:initial;pointer-events:none}.label,.join{position:absolute;top:28px;color:#fff;background:rgba(15,18,22,.78);border-radius:10px;font-family:Arial,sans-serif;padding:14px 18px;max-width:45%;box-sizing:border-box}.label{left:28px}.join{right:28px;text-align:center;font-size:16px}.singer{display:block;font-size:28px;line-height:1.2;overflow-wrap:anywhere}.detail,.upcoming,.status{display:block;font-size:14px;margin-top:7px;line-height:1.4}.upcoming{color:#f0d8a1}.status{color:#cce5e2}canvas{display:block;width:112px;height:112px;margin-bottom:8px}.caption{font-size:13px;color:#d2dad8}';
+  style.textContent = ':host{all:initial;pointer-events:none}.label,.join{position:absolute;top:28px;color:#fff;background:rgba(15,18,22,.78);border-radius:10px;font-family:Arial,sans-serif;padding:14px 18px;max-width:45%;box-sizing:border-box}.label{left:28px}.join{right:28px;text-align:center;font-size:16px}.singer{display:block;font-size:28px;line-height:1.2;overflow-wrap:anywhere}.detail,.upcoming,.status{display:block;font-size:14px;margin-top:7px;line-height:1.4}.upcoming{color:#f0d8a1}.status{color:#cce5e2}canvas{display:block;width:112px;height:112px;margin-bottom:8px}.caption{font-size:13px;color:#d2dad8}.code{font-size:24px;font-weight:700;letter-spacing:.18em;color:#fff;margin:2px 0 4px}';
   const label = document.createElement('div'); label.className = 'label';
   const singer = document.createElement('strong'); singer.className = 'singer'; singer.textContent = 'Karaoke playback test';
   const detail = document.createElement('span'); detail.className = 'detail';
@@ -17,9 +17,10 @@ export function createOverlay(viewerUrl: string) {
   const join = document.createElement('div'); join.className = 'join';
   const canvas = document.createElement('canvas');
   const title = document.createElement('div'); title.textContent = 'Scan to join';
-  const caption = document.createElement('div'); caption.className = 'caption'; caption.textContent = 'Playback test · view only';
+  const caption = document.createElement('div'); caption.className = roomCode ? 'code' : 'caption'; caption.textContent = roomCode ? roomCode : 'Playback test · view only';
+  const hint = document.createElement('div'); hint.className = 'caption'; hint.textContent = roomCode ? 'Room code · enter it on the site' : '';
   const address = document.createElement('div'); address.className = 'caption'; address.textContent = new URL(viewerUrl).host;
-  join.append(canvas, title, caption, address);
+  join.append(canvas, title, caption, hint, address);
   root.append(style, label, join);
   void QRCode.toCanvas(canvas, viewerUrl, { width: 224, margin: 2, errorCorrectionLevel: 'M' });
   let mounted = false;

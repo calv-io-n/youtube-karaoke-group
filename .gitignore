@@ -11,3 +11,4 @@ artifacts/*.json
 artifacts/*.png
 artifacts/*.webm
 !artifacts/.gitkeep
+.gate-sessions.json
